@@ -4,6 +4,16 @@
 [![GoDoc](https://pkg.go.dev/badge/github.com/AllenDang/cimgui-go?utm_source=godoc)](https://pkg.go.dev/mod/github.com/AllenDang/cimgui-go)
 [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go#gui)
 
+> [!important]
+> **gwtrade fork.** This is AllenDang/cimgui-go v1.6.0 with one patch, on branch `gwt` (tags `v1.6.0-gwt.N`),
+> used by GWT V2 through a `replace` directive. The module path is unchanged.
+>
+> `backend/glfwbackend` asks Windows and Linux for an **OpenGL 3.2 core** context first, falling back to
+> upstream's 3.0 request. `imgui_impl_opengl3` sets `ImGuiBackendFlags_RendererHasVtxOffset` only on GL 3.2+,
+> and some drivers grant a 3.0 request literally. Without the flag a draw list past 65,535 vertices wraps its
+> 16-bit indices into stray triangles. `GLFWBackend.SetPreferCoreProfile(false)` restores the 3.0 request, and
+> `GLFWBackend.GLInfo()` returns the context's GL_VERSION, GL_RENDERER and GL_VENDOR.
+
 # cimgui-go 
 
 This project aims to generate go wrapper for Dear ImGui.

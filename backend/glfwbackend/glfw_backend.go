@@ -403,6 +403,21 @@ func (b *GLFWBackend) SetWindowFlags(flag GLFWWindowFlags, value int) {
 	C.igWindowHint(C.GLFWWindowFlags(flag), C.int(value))
 }
 
+// SetPreferCoreProfile chooses the OpenGL context CreateWindow asks for on
+// Windows and Linux: true (the default in this fork) tries a 3.2 core
+// profile first, so imgui_impl_opengl3 can draw draw lists past 65,535
+// vertices, and falls back to 3.0; false asks for 3.0 only, as upstream
+// cimgui-go does. macOS always gets 3.2 core. Call it before CreateWindow.
+func (b *GLFWBackend) SetPreferCoreProfile(prefer bool) {
+	C.igGLFWSetPreferCoreProfile(C.bool(prefer))
+}
+
+// GLInfo returns the GL_VERSION, GL_RENDERER and GL_VENDOR strings of the
+// context CreateWindow made (empty before it).
+func (b *GLFWBackend) GLInfo() (version, renderer, vendor string) {
+	return C.GoString(C.igGLFWGLInfo(0)), C.GoString(C.igGLFWGLInfo(1)), C.GoString(C.igGLFWGLInfo(2))
+}
+
 // SetIcons sets icons for the window.
 // THIS CODE COMES FROM https://github.com/go-gl/glfw (BSD-3 clause) - Copyright (c) 2012 The glfw3-go Authors. All rights reserved.
 func (b *GLFWBackend) SetIcons(images ...image.Image) {

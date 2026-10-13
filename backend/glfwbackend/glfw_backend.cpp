@@ -48,6 +48,31 @@ int igInitGLFW() {
     return glfwInit();
 }
 
+// [gwtrade] Prefer a GL 3.2 core context on Windows and Linux (see
+// igCreateGLFWWindow); false keeps cimgui-go's original 3.0 request.
+static bool igGLFWPreferCore = true;
+
+void igGLFWSetPreferCoreProfile(bool prefer) { igGLFWPreferCore = prefer; }
+
+// [gwtrade] The context's GL_VERSION, GL_RENDERER and GL_VENDOR, saved while
+// igCreateGLFWWindow has the context current (it releases it before
+// returning).
+static char igGLFWGLInfoBuf[3][256];
+
+static void igGLFWSaveGLInfo() {
+  const GLenum names[3] = {GL_VERSION, GL_RENDERER, GL_VENDOR};
+  for (int i = 0; i < 3; i++) {
+    const char *s = (const char *)glGetString(names[i]);
+    snprintf(igGLFWGLInfoBuf[i], sizeof(igGLFWGLInfoBuf[i]), "%s", s ? s : "");
+  }
+}
+
+const char *igGLFWGLInfo(int which) {
+  if (which < 0 || which > 2)
+    return "";
+  return igGLFWGLInfoBuf[which];
+}
+
 GLFWwindow *igCreateGLFWWindow(const char *title, int width, int height,
                                VoidCallback afterCreateContext) {
     // Decide GL+GLSL versions
@@ -65,19 +90,42 @@ GLFWwindow *igCreateGLFWWindow(const char *title, int width, int height,
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);           // Required on Mac
 #else
-  // GL 3.0 + GLSL 130
+  // [gwtrade] GL 3.2 core + GLSL 150 first, then GL 3.0 + GLSL 130.
+  // imgui_impl_opengl3 honours ImDrawCmd::VtxOffset (large meshes, more
+  // than 65,535 vertices per draw list) only on a GL 3.2+ context. Asked for
+  // 3.0, some drivers (Windows on ARM / GLOn12, some Intel and AMD drivers,
+  // VMs) give exactly 3.0 or 3.1, so big draw lists wrap their 16-bit
+  // indices into stray triangles. A 3.2 core request gets their newest core
+  // profile; a driver without one falls back to the old 3.0 request.
   const char *glsl_version = "#version 130";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-  // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+
-  // only glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // 3.0+ only
+  GLFWwindow *window = NULL;
+  if (igGLFWPreferCore) {
+    glsl_version = "#version 150";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    window = glfwCreateWindow(width, height, title, NULL, NULL);
+  }
+  if (window == NULL) {
+    glsl_version = "#version 130";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_FALSE);
+  }
 #endif
 
   // Create window with graphics context
-  GLFWwindow *window = glfwCreateWindow(width, height, title, NULL, NULL);
+#if defined(IMGUI_IMPL_OPENGL_ES2) || defined(__APPLE__)
+  GLFWwindow *window = NULL;
+#endif
+  if (window == NULL)
+    window = glfwCreateWindow(width, height, title, NULL, NULL);
   if (window == NULL)
     return NULL;
   glfwMakeContextCurrent(window);
+  igGLFWSaveGLInfo();
   glfwSwapInterval(1); // Enable vsync
 
   // Setup Dear ImGui context
