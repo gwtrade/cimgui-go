@@ -38,9 +38,20 @@ static void glfw_error_callback(int error, const char *description) {
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+// [gwtrade] macOS (live resize) and Windows (the modal size loop) block
+// inside glfwPollEvents while a window edge is dragged, so this callback is
+// the only thing that redraws the window there. X11 and Wayland do not
+// block: the run loop draws at the new size on its next tick. Drawing here
+// as well put a whole frame and a vsync'd swap behind every configure event
+// of an interactive resize (several per tick on KWin/Wayland), so the edge
+// trailed the pointer (GWT-209).
 void glfw_window_refresh_callback(GLFWwindow *window) {
+#if !defined(__linux__)
   VoidCallback loopFunc = (VoidCallback)(glfwGetWindowUserPointer(window));
   glfw_render(window, loopFunc);
+#else
+  (void)window;
+#endif
 }
 
 int igInitGLFW() {
@@ -256,6 +267,16 @@ void igGLFWRunLoop(GLFWwindow *window, VoidCallback loop, VoidCallback beforeRen
         afterRender();
       }
       lastFrameTime += frameTime;
+      // [gwtrade] A frame that took more than two ticks drops the ticks it
+      // missed instead of drawing them back-to-back: with slow presents (a
+      // window on a monitor of another graphics card, GWT-213) the loop
+      // otherwise never sleeps again and keeps the GPU copy path saturated.
+      // One late tick (a vsync'd swap that just missed a vblank) still
+      // catches up as before, so a normal 60 FPS cadence is unchanged.
+      double now = glfwGetTime();
+      if (now - lastFrameTime > 2 * frameTime) {
+        lastFrameTime = now;
+      }
     } else {
       double timeToSleep = frameTime - frameDeltaTime;
       std::this_thread::sleep_for(std::chrono::duration<double>(timeToSleep));
